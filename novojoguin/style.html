@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super SlideBattle!</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #282c34;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        .arena {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background-color: grey;
+            border: 5px solid black;
+            display: none;
+        }
+        .player {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+        }
+        #player1 {
+            background-color: blue;
+            top: calc(50% - 20px);
+            left: calc(20% - 20px);
+        }
+        #player2 {
+            background-color: green;
+            top: calc(50% - 20px);
+            left: calc(80% - 20px);
+        }
+        .hole {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: black;
+        }
+        .obstacle {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background-color: brown;
+        }
+        #message, #menu {
+            text-align: center;
+            margin-top: 20px;
+            padding: 10px;
+            border: 2px solid white;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            font-size: 24px;
+            font-weight: bold;
+            width: 300px;
+        }
+        #message {
+            display: none;
+        }
+        #menu {
+            display: flex;
+            flex-direction: column;
+        }
+        button {
+            margin: 5px;
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="menu">
+        <button id="playButton">Jogar</button>
+        <button id="instructionsButton">Instruções</button>
+        <button id="creditsButton">Créditos</button>
+    </div>
+    
+    <div class="arena">
+        <div class="player" id="player1"></div>
+        <div class="player" id="player2"></div>
+        <div class="hole" style="left: 0; bottom: 0;"></div>
+        <div class="hole" style="right: 0; bottom: 0;"></div>
+        <div class="hole" style="left: 0; top: 0;"></div>
+        <div class="hole" style="right: 0; top: 0;"></div>
+        <div class="obstacle" style="top: 200px; left: 300px;"></div>
+        <div class="obstacle" style="top: 400px; left: 500px;"></div>
+    </div>
+    
+    <div id="message">Player 1: 5 vidas | Player 2: 5 vidas</div>
+
+    <script>
+        const player1 = document.getElementById('player1');
+        const player2 = document.getElementById('player2');
+        const message = document.getElementById('message');
+        const arena = document.querySelector('.arena');
+        const playButton = document.getElementById('playButton');
+        const instructionsButton = document.getElementById('instructionsButton');
+        const menu = document.getElementById('menu');
+
+        let player1Lives = 5;
+        let player2Lives = 5;
+        const playerSpeed = 5;
+        const punchForce = 50;
+        const friction = 0.98;
+        const minSpeed = 0.1;
+        const collisionThreshold = 40;
+        let gameEnded = false;
+
+        let player1Velocity = { x: 0, y: 0 };
+        let player2Velocity = { x: 0, y: 0 };
+
+        const updateMessage = () => {
+            message.textContent = `Player 1: ${player1Lives} vidas | Player 2: ${player2Lives} vidas`;
+        };
+
+        const checkCollision = (player, element) => {
+            const pRect = player.getBoundingClientRect();
+            const eRect = element.getBoundingClientRect();
+            return !(
+                pRect.bottom < eRect.top ||
+                pRect.top > eRect.bottom ||
+                pRect.right < eRect.left ||
+                pRect.left > eRect.right
+            );
+        };
+
+        const checkPlayerCollision = () => {
+            const p1Rect = player1.getBoundingClientRect();
+            const p2Rect = player2.getBoundingClientRect();
+            return !(
+                p1Rect.bottom < p2Rect.top ||
+                p1Rect.top > p2Rect.bottom ||
+                p1Rect.right < p2Rect.left ||
+                p1Rect.left > p2Rect.right
+            );
+        };
+
+        const checkGameOver = () => {
+            if (player1Lives <= 0) {
+                message.textContent = 'Player 2 venceu!';
+                gameEnded = true;
+            } else if (player2Lives <= 0) {
+                message.textContent = 'Player 1 venceu!';
+                gameEnded = true;
+            }
+        };
+
+        const movePlayer = (player, velocity) => {
+            const newX = player.offsetLeft + velocity.x;
+            const newY = player.offsetTop + velocity.y;
+
+            if (newX < 0) {
+                player.style.left = '0px';
+                velocity.x = -velocity.x;
+            } else if (newX > arena.offsetWidth - player.offsetWidth) {
+                player.style.left = `${arena.offsetWidth - player.offsetWidth}px`;
+                velocity.x = -velocity.x;
+            } else {
+                player.style.left = `${newX}px`;
+            }
+
+            if (newY < 0) {
+                player.style.top = '0px';
+                velocity.y = -velocity.y;
+            } else if (newY > arena.offsetHeight - player.offsetHeight) {
+                player.style.top = `${arena.offsetHeight - player.offsetHeight}px`;
+                velocity.y = -velocity.y;
+            } else {
+                player.style.top = `${newY}px`;
+            }
+        };
+
+        const applyFriction = (velocity) => {
+            velocity.x *= friction;
+            velocity.y *= friction;
+
+            if (Math.abs(velocity.x) < minSpeed) velocity.x = 0;
+            if (Math.abs(velocity.y) < minSpeed) velocity.y = 0;
+        };
+
+        const getDistanceBetweenPlayers = () => {
+            const p1CenterX = player1.offsetLeft + 20;
+            const p1CenterY = player1.offsetTop + 20;
+            const p2CenterX = player2.offsetLeft + 20;
+            const p2CenterY = player2.offsetTop + 20;
+
+            const distanceX = p2CenterX - p1CenterX;
+            const distanceY = p2CenterY - p1CenterY;
+
+            return Math.sqrt(distanceX ** 2 + distanceY ** 2);
+        };
+
+        const attackPlayer = (attacker, target, targetVelocity) => {
+            const distance = getDistanceBetweenPlayers();
+            const attackRange = 50;
+
+            if (distance <= attackRange) {
+                const dx = target.offsetLeft + 20 - (attacker.offsetLeft + 20);
+                const dy = target.offsetTop + 20 - (attacker.offsetTop + 20);
+
+                const norm = Math.sqrt(dx ** 2 + dy ** 2);
+                if (norm > 0) {
+                    const pushX = (dx / norm) * punchForce;
+                    const pushY = (dy / norm) * punchForce;
+
+                    targetVelocity.x += pushX;
+                    targetVelocity.y += pushY;
+                }
+            }
+        };
+
+        const resetPlayerPosition = (player, velocity) => {
+            if (player === player1) {
+                player.style.left = 'calc(20% - 20px)';
+                player.style.top = 'calc(50% - 20px)';
+                player1Velocity = { x: 0, y: 0 };
+            } else {
+                player.style.left = 'calc(80% - 20px)';
+                player.style.top = 'calc(50% - 20px)';
+                player2Velocity = { x: 0, y: 0 };
+            }
+        };
+
+        const handlePlayerCollision = () => {
+            if (checkPlayerCollision()) {
+                const distance = getDistanceBetweenPlayers();
+                if (distance < collisionThreshold) {
+                    const overlap = collisionThreshold - distance;
+                    const dx = (player2.offsetLeft + 20 - (player1.offsetLeft + 20)) / distance;
+                    const dy = (player2.offsetTop + 20 - (player1.offsetTop + 20)) / distance;
+
+                    player1.style.left = `${player1.offsetLeft - dx * overlap}px`;
+                    player1.style.top = `${player1.offsetTop - dy * overlap}px`;
+                    player2.style.left = `${player2.offsetLeft + dx * overlap}px`;
+                    player2.style.top = `${player2.offsetTop + dy * overlap}px`;
+                }
+            }
+        };
+
+        const checkHolesCollision = (player) => {
+            const holes = document.querySelectorAll('.hole');
+            holes.forEach((hole) => {
+                if (checkCollision(player, hole)) {
+                    if (player === player1) {
+                        player1Lives--;
+                        resetPlayerPosition(player1, player1Velocity);
+                    } else {
+                        player2Lives--;
+                        resetPlayerPosition(player2, player2Velocity);
+                    }
+                    updateMessage();
+                    checkGameOver();
+                }
+            });
+        };
+
+        const checkObstacleCollision = (player) => {
+            const obstacles = document.querySelectorAll('.obstacle');
+            obstacles.forEach((obstacle) => {
+                if (checkCollision(player, obstacle)) {
+                    if (player === player1) {
+                        player1Velocity.x = -player1Velocity.x;
+                        player1Velocity.y = -player1Velocity.y;
+                    } else {
+                        player2Velocity.x = -player2Velocity.x;
+                        player2Velocity.y = -player2Velocity.y;
+                    }
+                }
+            });
+        };
+
+        const gameLoop = () => {
+            if (!gameEnded) {
+                applyFriction(player1Velocity);
+                applyFriction(player2Velocity);
+
+                movePlayer(player1, player1Velocity);
+                movePlayer(player2, player2Velocity);
+
+                checkHolesCollision(player1);
+                checkHolesCollision(player2);
+                checkObstacleCollision(player1);
+                checkObstacleCollision(player2);
+                handlePlayerCollision();
+            }
+
+            requestAnimationFrame(gameLoop);
+        };
+
+        playButton.addEventListener('click', () => {
+            menu.style.display = 'none';
+            arena.style.display = 'block';
+            message.style.display = 'block';
+            gameEnded = false;
+            player1Lives = 5;
+            player2Lives = 5;
+            updateMessage();
+            gameLoop();
+        });
+
+        instructionsButton.addEventListener('click', () => {
+    menu.style.display = 'none';
+
+    const instructionsText = document.createElement('p');
+    instructionsText.textContent = 'sem instrucoes aqui';
+    instructionsText.style.color = 'white';
+    instructionsText.style.textAlign = 'center';
+    document.body.appendChild(instructionsText);
+});
+
+creditsButton.addEventListener('click', () => {
+    menu.style.display = 'none';
+
+    const creditsContainer = document.createElement('div');
+    creditsContainer.style.display = 'flex';
+    creditsContainer.style.flexDirection = 'column';
+    creditsContainer.style.alignItems = 'center';
+    creditsContainer.style.marginTop = '20px';
+
+    const creditsText = document.createElement('p');
+    creditsText.textContent = 'Créditos: Jogo desenvolvido por Vidaletti';
+    creditsText.style.color = 'white';
+    creditsText.style.textAlign = 'center';
+
+    const tiktokLink1 = document.createElement('a');
+    tiktokLink1.href = 'https://www.tiktok.com/@o_embananado';
+    tiktokLink1.textContent = 'Meu TikTok';
+    tiktokLink1.style.color = 'lightblue';
+    tiktokLink1.style.marginTop = '10px';
+    tiktokLink1.target = '_blank';
+
+    const tiktokLink2 = document.createElement('a');
+    tiktokLink2.href = 'https://www.tiktok.com/@vinaboxy';
+    tiktokLink2.textContent = 'Meu Segundo TikTok';
+    tiktokLink2.style.color = 'lightblue';
+    tiktokLink2.style.marginTop = '10px';
+    tiktokLink2.target = '_blank';
+
+    const youtubeLink = document.createElement('a');
+    youtubeLink.href = 'https://www.youtube.com/@o_embananado';
+    youtubeLink.textContent = 'Meu canal do YouTube';
+    youtubeLink.style.color = 'lightblue';
+    youtubeLink.style.marginTop = '10px';
+    youtubeLink.target = '_blank';
+
+    creditsContainer.appendChild(creditsText);
+    creditsContainer.appendChild(tiktokLink1);
+    creditsContainer.appendChild(tiktokLink2);
+    creditsContainer.appendChild(youtubeLink);
+
+    document.body.appendChild(creditsContainer);
+});
+
+
+
+
+
+        window.addEventListener('keydown', (e) => {
+            if (gameEnded) return;
+
+            if (e.key === 'w') player1Velocity.y = -playerSpeed;
+            if (e.key === 's') player1Velocity.y = playerSpeed;
+            if (e.key === 'a') player1Velocity.x = -playerSpeed;
+            if (e.key === 'd') player1Velocity.x = playerSpeed;
+
+            if (e.key === 'ArrowUp') player2Velocity.y = -playerSpeed;
+            if (e.key === 'ArrowDown') player2Velocity.y = playerSpeed;
+            if (e.key === 'ArrowLeft') player2Velocity.x = -playerSpeed;
+            if (e.key === 'ArrowRight') player2Velocity.x = playerSpeed;
+
+            if (e.key === ' ') {
+                attackPlayer(player1, player2, player2Velocity);
+            }
+
+            if (e.key === 'Enter') {
+                attackPlayer(player2, player1, player1Velocity);
+            }
+        });
+    </script>
+</body>
+</html>
